@@ -46,12 +46,12 @@ def calibrate():
     camera_pts = []
     def calibration_click(event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
-            camera_pts.append([x * (camera_width / width), y * (camera_height / height)])
+            camera_pts.append([x * (camera_width / WIDTH), y * (camera_height / HEIGHT)])
             print(camera_pts)
 
 
     ret_val, img = cam.read()
-    cv2.imshow('camera calibrator', cv2.resize(img, (width, height)))
+    cv2.imshow('camera calibrator', cv2.resize(img, (WIDTH, HEIGHT)))
     cv2.setMouseCallback("camera calibrator", calibration_click)
 
     while True:
@@ -160,7 +160,7 @@ if __name__ == '__main__':
     camera_height = 1080
     try:
         camera_pts = pickle.load(open("camera_pts.p", "rb"))
-    except:
+    except OSError as e:
         camera_pts = calibrate()
         pickle.dump(camera_pts, open("camera_pts.p", "wb"))
 
