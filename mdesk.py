@@ -21,7 +21,7 @@ SHOW_THRES = False
 KBD_YELLOW_LOWER = [100, 160, 200]
 KBD_YELLOW_UPPER = [160, 255, 255]
 
-find_windows = subprocess.Popen("./find_windows", shell=True, stdout=subprocess.PIPE)
+find_windows = subprocess.Popen("swift ./find_windows.swift", shell=True, stdout=subprocess.PIPE)
 window_regex = re.compile(r'(.*)\t\(([\d\.]+), ([\d\.]+), ([\d\.]+), ([\d\.]+)\)')
 windows = []
 for line in find_windows.stdout.readlines():
@@ -169,6 +169,7 @@ if __name__ == '__main__':
     # iM, _ = cv2.findHomography(np.float32(project_pts), np.float32(camera_pts))
 
     kbd_centroid = None
+    kbd_closest_window = None
     while True:
         ret_val, img = cam.read()
         rows, cols, ch = img.shape
@@ -232,6 +233,14 @@ if __name__ == '__main__':
 
         if kbd_centroid is not None:
             cv2.circle(det, (kbd_centroid[0], kbd_centroid[1]), 10, (255, 0, 255), 10)
+            new_kbd_closest_window = sorted([window for window in windows if window["drawing"]], key=lambda w: np.linalg.norm(kbd_centroid - w["last_centroid"]))[0]
+            if new_kbd_closest_window != kbd_closest_window:
+                kbd_closest_window = new_kbd_closest_window
+                cmd = "/Users/osnr/Code/mdesk/mdesk/click -x {} -y {}".format(int(kbd_closest_window["left"] + 10), int(kbd_closest_window["top"] + 50))
+                subprocess.run(cmd, shell=True)
+                # kbd_closest_window_file = open("closest_window.txt", "w")
+                # kbd_closest_window_file.write(cmd)
+                # kbd_closest_window_file.close()ye
 
         cv2.imshow('projector', det)
         if cv2.waitKey(1) == 27: break
