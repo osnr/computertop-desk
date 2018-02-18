@@ -18,6 +18,9 @@ from mss import mss
 MIN_THRES = 200
 SHOW_THRES = False
 
+KBD_YELLOW_LOWER = [100, 160, 200]
+KBD_YELLOW_UPPER = [160, 255, 255]
+
 find_windows = subprocess.Popen("./find_windows", shell=True, stdout=subprocess.PIPE)
 window_regex = re.compile(r'(.*)\t\(([\d\.]+), ([\d\.]+), ([\d\.]+), ([\d\.]+)\)')
 windows = []
@@ -63,28 +66,12 @@ def get_new(old):
     return new
 
 def paperdet(orig):
-    # these constants are carefully picked
-    MORPH = 9
-    CANNY = 84
-    HOUGH = 25
-
     img = cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
 
     cv2.GaussianBlur(img, (3,3), 0, img)
     
     _, img = cv2.threshold(img, MIN_THRES, 255, cv2.THRESH_BINARY)
     if SHOW_THRES: cv2.imshow('thres', img)
-
-    # this is to recognize white on white
-    # kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(MORPH,MORPH))
-    # dilated = cv2.dilate(img, kernel)
-
-    # edges = cv2.Canny(img, 0, CANNY, apertureSize=3)
-
-    # lines = cv2.HoughLinesP(edges, 1,  3.14/180, HOUGH)
-    # for line in lines[0]:
-    #      cv2.line(edges, (line[0], line[1]), (line[2], line[3]),
-    #                      (255,0,0), 2, 8)
 
     #cv2.UMat(np.zeros((HEIGHT, WIDTH, 3), np.uint8))
     new = get_new(orig)
@@ -118,16 +105,26 @@ def centroid(rect):
     return np.float32([moments['m10']/moments['m00'], moments['m01']/moments['m00']])
 
 def kbddet(img):
-    lower = np.array([100, 160, 200], dtype='uint8')
-    upper = np.array([160, 255, 255], dtype='uint8')
+    lower = np.array(KBD_YELLOW_LOWER, dtype='uint8')
+    upper = np.array(KBD_YELLOW_UPPER, dtype='uint8')
     mask = cv2.inRange(img, lower, upper)
-    ce = centroid(mask)
 
-    # _, contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)
-    # cv2.drawContours(mask, contours, -1,(255,0,255),1)
-    cv2.imshow('mask', cv2.convexHull(mask))
+    # new = get_new(img)
+    # _, contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # contours = list(filter(lambda cont: cv2.contourArea(cont) > 10, contours))
 
-    return ce
+    # cv2.drawContours(new, contours, -1, (255,0,255),1)
+    # cv2.imshow('new', new)
+
+    # if len(contours) != 3:
+    #     raise ValueError("Weird # of contours, can't find KBD")
+
+    # points = [centroid(cont) for cont in contours]
+    # points_by_x = sorted(points, key=lambda pt: pt[0])
+
+    # TODO: Return start, end of whisker
+
+    return centroid(mask)
 
 WIDTH = 1280
 HEIGHT = 800 - 22 # - title bar height
@@ -171,6 +168,7 @@ if __name__ == '__main__':
     # M = cv2.getAffineTransform(np.float32(camera_pts[0:3]), np.float32(project_pts[0:3]))
     # iM, _ = cv2.findHomography(np.float32(project_pts), np.float32(camera_pts))
 
+    kbd_centroid = None
     while True:
         ret_val, img = cam.read()
         rows, cols, ch = img.shape
@@ -183,9 +181,9 @@ if __name__ == '__main__':
         # if cv2.waitKey(1) == 27: break
         # continue
 
-        # try:
-        # kbd_centroid = kbddet(warped)
-        # except: pass
+        try:
+            kbd_centroid = kbddet(warped)
+        except: pass
 
         det, rects = paperdet(warped)
         # det = det.get()
@@ -200,6 +198,7 @@ if __name__ == '__main__':
                 window["drawing"] = True
                 window["last_centroid"] = cen
             except:
+                print("Excess window!")
                 window = windows[0]
 
             sct_img = np.array(sct.grab(window))[:,:,:3]
@@ -231,7 +230,8 @@ if __name__ == '__main__':
 
             det += sct_img_warped # .get()
 
-        # cv2.circle(det, (kbd_centroid[0], kbd_centroid[1]), 10, (255, 0, 255), 10)
+        if kbd_centroid is not None:
+            cv2.circle(det, (kbd_centroid[0], kbd_centroid[1]), 10, (255, 0, 255), 10)
 
         cv2.imshow('projector', det)
         if cv2.waitKey(1) == 27: break
