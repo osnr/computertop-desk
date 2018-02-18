@@ -11,6 +11,8 @@ import time
 import pickle
 import cv2
 
+from mss import mss
+
 def calibrate():
     print("Press key to begin calibration.")
     cv2.waitKey()
@@ -44,6 +46,10 @@ def paperdet(orig):
     HOUGH = 25
 
     img = cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
+
+    _, img = cv2.threshold(img, 240, 255, cv2.THRESH_BINARY)
+    cv2.imshow('thres', img)
+
     cv2.GaussianBlur(img, (3,3), 0, img)
 
     # this is to recognize white on white
@@ -56,6 +62,8 @@ def paperdet(orig):
     # for line in lines[0]:
     #      cv2.line(edges, (line[0], line[1]), (line[2], line[3]),
     #                      (255,0,0), 2, 8)
+
+    new = get_new(orig)
 
     # finding contours
     _, contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)
@@ -72,14 +80,16 @@ def paperdet(orig):
     # cv2.drawContours(orig, rects,-1,(0,255,0),1)
 
     # show only contours
-    new = get_new(orig)
+
     cv2.drawContours(new, rects,-1,(255,0,255),1)
-    return new
+    return new, rects
 
 
 if __name__ == '__main__':
     width = 1280
     height = 800 - 22 # - title bar height
+
+    sct = mss()
 
     # create calibration outline
     image = np.zeros((height, width, 3), dtype=np.float32)
@@ -121,11 +131,23 @@ if __name__ == '__main__':
 
         rows, cols, ch = img.shape
         warped = cv2.warpPerspective(img, M, (cols, rows))[0:height, 0:width]
-        # cv2.imshow('projector', warped)
+        # cv2.imshow('img', warped)
 
-        det = paperdet(warped)
-        cv2.imshow('projector', det)
+        det, rects = paperdet(warped)
 
+        if len(rects) >= 1:
+            rect = rects[0]
+            sct_img = np.array(sct.grab({ 'top': 0, 'left': 800, 'width': 200, 'height': 200}))
+            moments = cv2.moments(rect)
+            Mw = cv2.getAffineTransform(
+                np.float32([(0, 0), (200, 0), (100, 100)]),
+                np.float32([rect[0], rect[1], (moments['m10']/moments['m00'], moments['m01']/moments['m00'])]))
+
+            sct_img_warped = cv2.warpAffine(sct_img, Mw, (width, height))
+
+            cv2.imshow('projector', sct_img_warped)
+
+        cv2.imshow('det', det)
         if cv2.waitKey(1) == 27: break
 
     cv2.destroyAllWindows()
