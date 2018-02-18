@@ -24,8 +24,16 @@ windows = []
 for line in find_windows.stdout.readlines():
     line_parts = window_regex.match(line.decode("utf-8"))
     title, x, y, width, height = line_parts.groups()
-    if ("Google Search" in title or "fish" in title or "Stack Overflow" in title or "Untitled 3" in title) and float(height) < 1000:
-        windows.append({ 'title': title, 'left': float(x), 'top': float(y), 'width': float(width), 'height': float(height)})
+    if ("Google" in title or "fish" in title or "Stack Overflow" in title or "Untitled 3" in title) and float(height) < 1000:
+        windows.append({
+            'title': title,
+            'left': float(x),
+            'top': float(y),
+            'width': float(width),
+            'height': float(height),
+            'last_centroid': np.float32([0, 0]),
+            'drawing': False
+        })
 print(len(windows), windows)
 
 def calibrate():
@@ -104,6 +112,10 @@ def paperdet(orig):
     return new, rects
 
 
+def centroid(rect):
+    moments = cv2.moments(rect)
+    return np.float32([moments['m10']/moments['m00'], moments['m01']/moments['m00']])
+
 if __name__ == '__main__':
     width = 1280
     height = 800 - 22 # - title bar height
@@ -159,8 +171,14 @@ if __name__ == '__main__':
 
         det, rects = paperdet(warped)
 
+        for window in windows:
+            window["drawing"] = False
+
         for rectIdx, rect in enumerate(rects):
-            window = windows[rectIdx]
+            cen = centroid(rect)
+            window = sorted([window for window in windows if not window["drawing"]], key=lambda w: np.linalg.norm(cen - w["last_centroid"]))[0]
+            window["drawing"] = True
+            window["last_centroid"] = cen
 
             sct_img = np.array(sct.grab(window))[:,:,:3]
             sct_height, sct_width, _ = sct_img.shape
