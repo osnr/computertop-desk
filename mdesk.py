@@ -13,7 +13,7 @@ import cv2
 
 from mss import mss
 
-MIN_THRES = 240
+MIN_THRES = 200
 
 def calibrate():
     print("Press key to begin calibration.")
@@ -142,7 +142,6 @@ if __name__ == '__main__':
 
         for rect in rects:
             sct_img = np.array(sct.grab({ 'top': 0, 'left': 800, 'width': 200, 'height': 200}))[:,:,:3]
-            print(sct_img.shape)
             sct_width, sct_height, _ = sct_img.shape
 
             # max_dist = 0
@@ -155,8 +154,9 @@ if __name__ == '__main__':
 
             moments = cv2.moments(rect)
 
+            WMARGIN = 10
             Mw, _ = cv2.findHomography(
-                np.float32([(0, 0), (0, sct_height), (sct_width, sct_height), (sct_width, 0)]),
+                np.float32([(-WMARGIN, -WMARGIN), (-WMARGIN, sct_height + WMARGIN), (sct_width + WMARGIN, sct_height + WMARGIN), (sct_width + WMARGIN, -WMARGIN)]),
                 np.float32([rect[0], rect[1], rect[2], rect[3]]))
                 # np.float32([rect[0], (moments['m10']/moments['m00'], moments['m01']/moments['m00']), rect[2], rect[3]]))
 
