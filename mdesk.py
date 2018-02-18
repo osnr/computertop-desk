@@ -79,17 +79,18 @@ def paperdet(orig):
     # kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(MORPH,MORPH))
     # dilated = cv2.dilate(img, kernel)
 
-    edges = cv2.Canny(img, 0, CANNY, apertureSize=3)
+    # edges = cv2.Canny(img, 0, CANNY, apertureSize=3)
 
     # lines = cv2.HoughLinesP(edges, 1,  3.14/180, HOUGH)
     # for line in lines[0]:
     #      cv2.line(edges, (line[0], line[1]), (line[2], line[3]),
     #                      (255,0,0), 2, 8)
 
+    #cv2.UMat(np.zeros((HEIGHT, WIDTH, 3), np.uint8))
     new = get_new(orig)
 
     # finding contours
-    _, contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)
+    _, contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)
     contours = filter(lambda cont: cv2.arcLength(cont, False) > 100, contours)
     contours = filter(lambda cont: cv2.contourArea(cont) > 10000, contours)
 
@@ -105,10 +106,10 @@ def paperdet(orig):
     # show only contours
 
     cv2.drawContours(new, rects,-1,(255,0,255),1)
-    for rectIdx, rect in enumerate(rects):
+    # for rectIdx, rect in enumerate(rects):
     #     for i in range(4):
     #         cv2.putText(new, str(i), (rect[i][0] + 3, rect[i][1] + 3), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        cv2.putText(new, str(rectIdx), (rect[0][0], rect[0][1]), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        # cv2.putText(new, str(rectIdx), (rect[0][0], rect[0][1]), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
     return new, rects
 
 
@@ -116,25 +117,37 @@ def centroid(rect):
     moments = cv2.moments(rect)
     return np.float32([moments['m10']/moments['m00'], moments['m01']/moments['m00']])
 
-if __name__ == '__main__':
-    width = 1280
-    height = 800 - 22 # - title bar height
+def kbddet(img):
+    lower = np.array([100, 160, 200], dtype='uint8')
+    upper = np.array([160, 255, 255], dtype='uint8')
+    mask = cv2.inRange(img, lower, upper)
+    ce = centroid(mask)
 
+    # _, contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)
+    # cv2.drawContours(mask, contours, -1,(255,0,255),1)
+    cv2.imshow('mask', cv2.convexHull(mask))
+
+    return ce
+
+WIDTH = 1280
+HEIGHT = 800 - 22 # - title bar height
+
+if __name__ == '__main__':
     sct = mss()
 
     # create calibration outline
-    image = np.zeros((height, width, 3), dtype=np.float32)
-    image[0:height, 0:10] = [1, 0, 0]  # blue on left
-    image[0:height, (width - 10):width] = [0, 1, 0]  # green on right
-    image[0:10, 0:width] = [0, 0, 1]  # red on top
-    image[(height - 10):height, 0:width] = [0, 0, 1]  # ?? on bottom
+    image = np.zeros((HEIGHT, WIDTH, 3), dtype=np.float32)
+    image[0:HEIGHT, 0:10] = [1, 0, 0]  # blue on left
+    image[0:HEIGHT, (WIDTH - 10):WIDTH] = [0, 1, 0]  # green on right
+    image[0:10, 0:WIDTH] = [0, 0, 1]  # red on top
+    image[(HEIGHT - 10):HEIGHT, 0:WIDTH] = [0, 0, 1]  # ?? on bottom
 
     margin = 200
     project_pts = [
         (margin, margin),
-        (width - margin, margin),
-        (margin, height - margin),
-        (width - margin, height - margin)
+        (WIDTH - margin, margin),
+        (margin, HEIGHT - margin),
+        (WIDTH - margin, HEIGHT - margin)
     ]
     for idx, project_pt in enumerate(project_pts):
         cv2.circle(image, project_pt, 10, (0, 255, 0) if idx != 3 else (0, 255, 255), 10)
@@ -160,28 +173,38 @@ if __name__ == '__main__':
 
     while True:
         ret_val, img = cam.read()
-
         rows, cols, ch = img.shape
-        warped = cv2.warpPerspective(img, M, (cols, rows))[0:height, 0:width]
-        # warped = cv2.warpAffine(img, M, (cols, rows))[0:height, 0:width]
+        # img = cv2.UMat(img)
+
+        warped = cv2.warpPerspective(img, M, (cols, rows))[0:HEIGHT, 0:WIDTH]
+        # warped = cv2.warpAffine(img, M, (cols, rows))[0:HEIGHT, 0:WIDTH]
 
         # cv2.imshow('projector', warped)
         # if cv2.waitKey(1) == 27: break
         # continue
 
+        # try:
+        # kbd_centroid = kbddet(warped)
+        # except: pass
+
         det, rects = paperdet(warped)
+        # det = det.get()
 
         for window in windows:
             window["drawing"] = False
 
         for rectIdx, rect in enumerate(rects):
             cen = centroid(rect)
-            window = sorted([window for window in windows if not window["drawing"]], key=lambda w: np.linalg.norm(cen - w["last_centroid"]))[0]
-            window["drawing"] = True
-            window["last_centroid"] = cen
+            try:
+                window = sorted([window for window in windows if not window["drawing"]], key=lambda w: np.linalg.norm(cen - w["last_centroid"]))[0]
+                window["drawing"] = True
+                window["last_centroid"] = cen
+            except:
+                window = windows[0]
 
             sct_img = np.array(sct.grab(window))[:,:,:3]
             sct_height, sct_width, _ = sct_img.shape
+            # sct_img = cv2.UMat(sct_img)
 
             # max_dist = 0
             # max_pt = None
@@ -204,9 +227,11 @@ if __name__ == '__main__':
                 np.float32([rect[0], rect[1], rect[2], rect[3]]))
                 # np.float32([rect[0], (moments['m10']/moments['m00'], moments['m01']/moments['m00']), rect[2], rect[3]]))
 
-            sct_img_warped = cv2.warpPerspective(sct_img, Mw, (width, height))
+            sct_img_warped = cv2.warpPerspective(sct_img, Mw, (WIDTH, HEIGHT))
 
-            det += sct_img_warped
+            det += sct_img_warped # .get()
+
+        # cv2.circle(det, (kbd_centroid[0], kbd_centroid[1]), 10, (255, 0, 255), 10)
 
         cv2.imshow('projector', det)
         if cv2.waitKey(1) == 27: break
