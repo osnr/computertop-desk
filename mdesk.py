@@ -66,14 +66,14 @@ def paperdet(orig):
     rects = []
     for cont in contours:
         rect = cv2.approxPolyDP(cont, 40, True).copy().reshape(-1, 2)
-        rects.append(rect)
+        if len(rect) == 4: rects.append(rect)
 
     # # that's basically it
     # cv2.drawContours(orig, rects,-1,(0,255,0),1)
 
     # show only contours
-    new = get_new(img)
-    cv2.drawContours(new, rects,-1,(255,255,0),1)
+    new = get_new(orig)
+    cv2.drawContours(new, rects,-1,(255,0,255),1)
     return new
 
 
@@ -114,6 +114,7 @@ if __name__ == '__main__':
         pickle.dump(camera_pts, open("camera_pts.p", "wb"))
 
     M, status = cv2.findHomography(np.float32(camera_pts), np.float32(project_pts))
+    iM, _ = cv2.findHomography(np.float32(project_pts), np.float32(camera_pts))
 
     while True:
         ret_val, img = cam.read()
