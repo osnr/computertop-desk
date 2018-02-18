@@ -5,7 +5,6 @@ Created on Thu Jun 22 16:44:27 2017
 @author: sakurai
 """
 
-
 import numpy as np
 import time
 import pickle
@@ -27,7 +26,8 @@ windows = []
 for line in find_windows.stdout.readlines():
     line_parts = window_regex.match(line.decode("utf-8"))
     title, x, y, width, height = line_parts.groups()
-    if ("Google" in title or "fish" in title or "Stack Overflow" in title or "Untitled 3" in title) and float(height) < 1000:
+    # if ("Google" in title or "fish" in title or "Stack Overflow" in title or "Untitled 3" in title) and float(height) < 1000:
+    if float(height) < 600:
         windows.append({
             'title': title,
             'left': float(x),
@@ -35,7 +35,7 @@ for line in find_windows.stdout.readlines():
             'width': float(width),
             'height': float(height),
             'last_centroid': np.float32([0, 0]),
-            'drawing': False
+            'drawing': None
         })
 print(len(windows), windows)
 
@@ -71,10 +71,14 @@ def paperdet(orig):
     cv2.GaussianBlur(img, (3,3), 0, img)
     
     _, img = cv2.threshold(img, MIN_THRES, 255, cv2.THRESH_BINARY)
-    if SHOW_THRES: cv2.imshow('thres', img)
+    if SHOW_THRES:
+        cv2.imshow('thres', img)
 
     #cv2.UMat(np.zeros((HEIGHT, WIDTH, 3), np.uint8))
-    new = get_new(orig)
+    # new = get_new(orig)
+
+    # CANNY = 84
+    # edges = cv2.Canny(img, 0, CANNY, apertureSize=3)
 
     # finding contours
     _, contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_KCOS)
@@ -84,20 +88,16 @@ def paperdet(orig):
     # simplify contours down to polygons
     rects = []
     for cont in contours:
-        rect = cv2.approxPolyDP(cont, 40, True).copy().reshape(-1, 2)
+        rect = cv2.approxPolyDP(cont, 80, True).copy().reshape(-1, 2)
         if len(rect) == 4: rects.append(rect)
 
-    # # that's basically it
-    # cv2.drawContours(orig, rects,-1,(0,255,0),1)
+    # cv2.drawContours(new, rects,-1,(255,0,255),1)
 
-    # show only contours
-
-    cv2.drawContours(new, rects,-1,(255,0,255),1)
     # for rectIdx, rect in enumerate(rects):
     #     for i in range(4):
     #         cv2.putText(new, str(i), (rect[i][0] + 3, rect[i][1] + 3), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
         # cv2.putText(new, str(rectIdx), (rect[0][0], rect[0][1]), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-    return new, rects
+    return rects
 
 
 def centroid(rect):
@@ -186,17 +186,19 @@ if __name__ == '__main__':
             kbd_centroid = kbddet(warped)
         except: pass
 
-        det, rects = paperdet(warped)
+        rects = paperdet(warped)
         # det = det.get()
 
+        det = np.zeros_like(warped)
+
         for window in windows:
-            window["drawing"] = False
+            window["drawing"] = None
 
         for rectIdx, rect in enumerate(rects):
             cen = centroid(rect)
             try:
-                window = sorted([window for window in windows if not window["drawing"]], key=lambda w: np.linalg.norm(cen - w["last_centroid"]))[0]
-                window["drawing"] = True
+                window = sorted([window for window in windows if window["drawing"] is None], key=lambda w: np.linalg.norm(cen - w["last_centroid"]))[0]
+                window["drawing"] = rect
                 window["last_centroid"] = cen
             except:
                 print("Excess window!")
@@ -231,16 +233,22 @@ if __name__ == '__main__':
 
             det += sct_img_warped # .get()
 
-        if kbd_centroid is not None:
-            cv2.circle(det, (kbd_centroid[0], kbd_centroid[1]), 10, (255, 0, 255), 10)
-            new_kbd_closest_window = sorted([window for window in windows if window["drawing"]], key=lambda w: np.linalg.norm(kbd_centroid - w["last_centroid"]))[0]
-            if new_kbd_closest_window != kbd_closest_window:
-                kbd_closest_window = new_kbd_closest_window
-                cmd = "/Users/osnr/Code/mdesk/mdesk/click -x {} -y {}".format(int(kbd_closest_window["left"] + 10), int(kbd_closest_window["top"] + 50))
-                subprocess.run(cmd, shell=True)
-                # kbd_closest_window_file = open("closest_window.txt", "w")
-                # kbd_closest_window_file.write(cmd)
-                # kbd_closest_window_file.close()ye
+        try:
+            if kbd_centroid is not None:
+                # cv2.circle(det, (kbd_centroid[0], kbd_centroid[1]), 10, (255, 0, 255), 10)
+
+                new_kbd_closest_window = sorted([window for window in windows if window["drawing"] is not None], key=lambda w: np.linalg.norm(kbd_centroid - w["last_centroid"]))[0]
+                kbd_closest_rect = new_kbd_closest_window["drawing"]
+                cv2.drawContours(det, [kbd_closest_rect], -1, (255,0,255),1)
+
+                if new_kbd_closest_window != kbd_closest_window:
+                    kbd_closest_window = new_kbd_closest_window
+                    cmd = "/Users/osnr/Code/mdesk/mdesk/click -x {} -y {}".format(int(kbd_closest_window["left"] + 10), int(kbd_closest_window["top"] + 70))
+                    # subprocess.run(cmd, shell=True)
+                    kbd_closest_window_file = open("focus_closest_window.sh", "w")
+                    kbd_closest_window_file.write("echo hi > hi.txt\n" + cmd)
+                    kbd_closest_window_file.close()
+        except: pass
 
         cv2.imshow('projector', det)
         if cv2.waitKey(1) == 27: break
