@@ -13,6 +13,8 @@ import cv2
 
 from mss import mss
 
+MIN_THRES = 240
+
 def calibrate():
     print("Press key to begin calibration.")
     cv2.waitKey()
@@ -47,16 +49,16 @@ def paperdet(orig):
 
     img = cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
 
-    _, img = cv2.threshold(img, 240, 255, cv2.THRESH_BINARY)
+    cv2.GaussianBlur(img, (3,3), 0, img)
+    
+    _, img = cv2.threshold(img, MIN_THRES, 255, cv2.THRESH_BINARY)
     cv2.imshow('thres', img)
 
-    cv2.GaussianBlur(img, (3,3), 0, img)
-
     # this is to recognize white on white
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(MORPH,MORPH))
-    dilated = cv2.dilate(img, kernel)
+    # kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(MORPH,MORPH))
+    # dilated = cv2.dilate(img, kernel)
 
-    edges = cv2.Canny(dilated, 0, CANNY, apertureSize=3)
+    edges = cv2.Canny(img, 0, CANNY, apertureSize=3)
 
     # lines = cv2.HoughLinesP(edges, 1,  3.14/180, HOUGH)
     # for line in lines[0]:
@@ -82,6 +84,9 @@ def paperdet(orig):
     # show only contours
 
     cv2.drawContours(new, rects,-1,(255,0,255),1)
+    # for rectIdx, rect in enumerate(rects):
+    #     for i in range(4):
+    #         cv2.putText(new, str(i), (rect[i][0] + 3, rect[i][1] + 3), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
     return new, rects
 
 
@@ -135,19 +140,31 @@ if __name__ == '__main__':
 
         det, rects = paperdet(warped)
 
-        if len(rects) >= 1:
-            rect = rects[0]
-            sct_img = np.array(sct.grab({ 'top': 0, 'left': 800, 'width': 200, 'height': 200}))
+        for rect in rects:
+            sct_img = np.array(sct.grab({ 'top': 0, 'left': 800, 'width': 200, 'height': 200}))[:,:,:3]
+            print(sct_img.shape)
+            sct_width, sct_height, _ = sct_img.shape
+
+            # max_dist = 0
+            # max_pt = None
+            # for i in range(1, 4):
+            #     dist = np.linalg.norm(rect[i] - rect[0])
+            #     if dist > max_dist:
+            #         max_dist = dist
+            #         max_pt = rect[i]
+
             moments = cv2.moments(rect)
-            Mw = cv2.getAffineTransform(
-                np.float32([(0, 0), (200, 0), (100, 100)]),
-                np.float32([rect[0], rect[1], (moments['m10']/moments['m00'], moments['m01']/moments['m00'])]))
 
-            sct_img_warped = cv2.warpAffine(sct_img, Mw, (width, height))
+            Mw, _ = cv2.findHomography(
+                np.float32([(0, 0), (0, sct_height), (sct_width, sct_height), (sct_width, 0)]),
+                np.float32([rect[0], rect[1], rect[2], rect[3]]))
+                # np.float32([rect[0], (moments['m10']/moments['m00'], moments['m01']/moments['m00']), rect[2], rect[3]]))
 
-            cv2.imshow('projector', sct_img_warped)
+            sct_img_warped = cv2.warpPerspective(sct_img, Mw, (width, height))
 
-        cv2.imshow('det', det)
+            det += sct_img_warped
+
+        cv2.imshow('projector', det)
         if cv2.waitKey(1) == 27: break
 
     cv2.destroyAllWindows()
