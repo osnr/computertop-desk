@@ -14,7 +14,7 @@ import re
 
 from mss import mss
 
-MIN_THRES = 200
+MIN_THRES = 230
 SHOW_THRES = False
 
 KBD_YELLOW_LOWER = [100, 160, 200]
@@ -218,7 +218,7 @@ if __name__ == '__main__':
 
             moments = cv2.moments(rect)
 
-            WMARGIN = 20
+            WMARGIN = 0
             Mw, _ = cv2.findHomography(
                 np.float32([
                     (-WMARGIN, -WMARGIN),
